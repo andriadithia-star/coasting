@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Kasir Toko Roti v5 (Auto-Save Persistence)</title>
+    <!-- Memanggil CSS Bootstrap agar tampilan rapi -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .item-row { border-bottom: 1px dashed #ccc; padding-bottom: 10px; margin-bottom: 10px; }
+        .img-preview { max-height: 120px; object-fit: cover; border-radius: 5px; }
+        .table-thumbnail { max-height: 60px; max-width: 60px; object-fit: cover; border-radius: 5px; cursor: pointer; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4 mb-5">
+        <h2 class="mb-4 text-center text-primary fw-bold">Sistem Penjualan Toko Roti & Kue</h2>
+
+        <!-- BAGIAN 1: FORM INPUT PESANAN -->
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white fw-bold" id="formHeaderTitle">Input Pesanan Baru</div>
+            <div class="card-body">
+                <form id="orderForm">
+                    <!-- Nama Customer & Tanggal Order -->
+                    <div class="row mb-3">
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label fw-bold">Nama Customer</label>
+                            <input type="text" class="form-control" id="custName" placeholder="Masukkan nama pelanggan" required>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label fw-bold">Tanggal Order</label>
+                            <input type="date" class="form-control" id="orderDate" required>
+                        </div>
+                    </div>
+
+                    <!-- Upload Foto -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">Ambil Foto / Upload Gambar</label>
+                            <input type="file" class="form-control" id="orderPhoto" accept="image/*" capture="environment" onchange="previewImage(event)">
+                            <img id="imagePreview" src="" alt="Preview Foto" class="img-preview mt-2 d-none shadow-sm">
+                        </div>
+                    </div>
+
+                    <!-- TEMPAT PRODUK-PRODUK DITAMBAHKAN -->
+                    <label class="form-label fw-bold">Daftar Produk yang Dipesan</label>
+                    <div id="itemsContainer">
+                        <div class="row item-row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small">Nama & Jenis Produk</label>
+                                <select class="form-select product-select" onchange="toggleManual(this)" required>
+                                    <option value="" disabled selected>Pilih Produk...</option>
+                                    <optgroup label="Roti & Kue">
+                                        <option value="Salt Bread">Salt Bread</option>
+                                        <option value="Chewy Dubai">Chewy Dubai</option>
+                                        <option value="Soft Cookies">Soft Cookies</option>
+                                        <option value="Brownis">Brownis</option>
+                                    </optgroup>
+                                    <optgroup label="Minuman">
+                                        <option value="Coffee">Coffee</option>
+                                    </optgroup>
+                                    <option value="manual" class="text-primary fw-bold">+ Input Manual / Produk Baru</option>
+                                </select>
+                                <input type="text" class="form-control mt-2 product-manual d-none" placeholder="Ketik nama produk baru...">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label small">Harga Satuan (Rp)</label>
+                                <input type="number" class="form-control item-price" placeholder="Contoh: 15000" oninput="calcRow(this)" required>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label small">Jumlah (Qty)</label>
+                                <input type="number" class="form-control item-qty" placeholder="0" min="1" oninput="calcRow(this)" required>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label small">Subtotal (Rp)</label>
+                                <div class="d-flex">
+                                    <input type="number" class="form-control item-subtotal bg-light" readonly>
+                                    <button type="button" class="btn btn-danger ms-2" onclick="removeRow(this)">X</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-outline-primary btn-sm mb-4 fw-bold" onclick="addRow()">
+                        + Tambah Produk Lainnya
+                    </button>
+                    <hr>
+
+                    <!-- Pembayaran & Grand Total -->
+                    <div class="row mb-4 align-items-end">
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label fw-bold">Metode Pembayaran</label>
+                            <select class="form-select" id="paymentMethod" onchange="togglePaymentDetail(this)" required>
+                                <option value="" disabled selected>Pilih...</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Transfer Bank">Transfer Bank</option>
+                                <option value="QRIS">QRIS</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label fw-bold">Detail Bank / Pembayaran</label>
+                            <input type="text" class="form-control bg-light" id="paymentDetail" placeholder="Pilih transfer/qris" disabled>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label fw-bold">Status Pembayaran</label>
+                            <select class="form-select" id="payStatus" required>
+                                <option value="Belum Bayar">⏳ Belum Bayar</option>
+                                <option value="Sudah Bayar">✅ Sudah Bayar</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="form-label fw-bold">Grand Total (Rp)</label>
+                            <input type="text" class="form-control form-control-lg bg-light text-danger fw-bold" id="grandTotal" value="0" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1 fw-bold py-2" id="submitBtn">Simpan Pesanan</button>
+                        <button type="button" class="btn btn-secondary d-none" id="cancelEditBtn" onclick="resetFormState()">Batal Edit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- BAGIAN 2: TABEL STATUS & PROSES KUE -->
+        <div class="card">
+            <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+                <span>Daftar Status Pembuatan & Proses Kue</span>
+                <div>
+                    <button class="btn btn-sm btn-danger me-2" onclick="clearAllData()">🗑️ Hapus Semua Data</button>
+                    <button class="btn btn-sm btn-light fw-bold" onclick="printOrderTable()">🖨️ Print Daftar (PDF)</button>
+                </div>
+            </div>
+            <div class="card-body overflow-auto">
+                <table class="table table-bordered table-hover align-middle" id="orderTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>No</th>
+                            <th>Foto</th>
+                            <th>Customer & Tanggal</th>
+                            <th>Detail Pesanan</th>
+                            <th>Total Bayar</th>
+                            <th>Status Pembuatan</th>
+                            <th>Status Pembayaran</th>
+                            <th class="text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data otomatis muncul dari localStorage -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- BAGIAN 3: LOGIC JAVASCRIPT -->
+    <script>
+        // Ambil data dari localStorage jika ada, jika tidak kosongkan
+        let orders = JSON.parse(localStorage.getItem('bakery_orders')) || [];
+        let currentId = parseInt(localStorage.getItem('bakery_currentId')) || (orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1);
+        let currentPhotoBase64 = ""; 
+        let editingId = null; 
+
+        // Saat halaman pertama kali dibuka
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('orderDate').valueAsDate = new Date();
+            renderTable(); // Tampilkan data tersimpan ke tabel
+        });
+
+        // Fungsi menyimpan data ke LocalStorage browser
+        function saveData() {
+            localStorage.setItem('bakery_orders', JSON.stringify(orders));
+            localStorage.setItem('bakery_currentId', currentId);
+        }
+
+        function previewImage(event) {
+            const file = event.target.files[0];
+            const preview = document.getElementById("imagePreview");
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentPhotoBase64 = e.target.result;
+                    preview.src = currentPhotoBase64;
+                    preview.classList.remove("d-none");
+                }
+                reader.readAsDataURL(file);
+            } else {
+                currentPhotoBase64 = "";
+                preview.src = "";
+                preview.classList.add("d-none");
+            }
+        }
+
+        function togglePaymentDetail(selectElement) {
+            const detailInput = document.getElementById("paymentDetail");
+            if (selectElement.value === "Transfer Bank" || selectElement.value === "QRIS") {
+                detailInput.disabled = false;
+                detailInput.classList.remove("bg-light");
+                detailInput.setAttribute("required", "true");
+                detailInput.placeholder = "Contoh: BCA a.n Budi";
+            } else {
+                detailInput.disabled = true;
+                detailInput.classList.add("bg-light");
+                detailInput.removeAttribute("required");
+                detailInput.value = "";
+                detailInput.placeholder = "Pilih transfer/qris";
+            }
+        }
+
+        function toggleManual(selectElement) {
+            const manualInput = selectElement.parentElement.querySelector('.product-manual');
+            if (selectElement.value === 'manual') {
+                manualInput.classList.remove('d-none');
+                manualInput.setAttribute('required', 'true');
+            } else {
+                manualInput.classList.add('d-none');
+                manualInput.removeAttribute('required');
+                manualInput.value = '';
+            }
+        }
+
+        function addRow(productData = null) {
+            const container = document.getElementById("itemsContainer");
+            const firstRow = container.querySelector('.item-row');
+            const newRow = firstRow.cloneNode(true);
+            
+            const select = newRow.querySelector('.product-select');
+            const manualInput = newRow.querySelector('.product-manual');
+            const priceInput = newRow.querySelector('.item-price');
+            const qtyInput = newRow.querySelector('.item-qty');
+            const subtotalInput = newRow.querySelector('.item-subtotal');
+
+            if (productData) {
+                let optionExists = Array.from(select.options).some(opt => opt.value === productData.productName);
+                if (optionExists) {
+                    select.value = productData.productName;
+                    manualInput.classList.add('d-none');
+                } else {
+                    select.value = 'manual';
+                    manualInput.classList.remove('d-none');
+                    manualInput.value = productData.productName;
+                }
+                priceInput.value = productData.price;
+                qtyInput.value = productData.qty;
+                subtotalInput.value = productData.subtotal;
+            } else {
+                select.value = '';
+                manualInput.value = '';
+                manualInput.classList.add('d-none');
+                priceInput.value = '';
+                qtyInput.value = '';
+                subtotalInput.value = '';
+            }
+            container.appendChild(newRow);
+        }
+
+        function removeRow(btn) {
+            const rows = document.querySelectorAll('.item-row');
+            if (rows.length > 1) {
+                btn.closest('.item-row').remove();
+                calcGrandTotal();
+            } else {
+                alert("Pesanan minimal harus ada 1 produk!");
+            }
+        }
+
+        function calcRow(inputElement) {
+            const row = inputElement.closest('.item-row');
+            const price = parseFloat(row.querySelector('.item-price').value) || 0;
+            const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+            row.querySelector('.item-subtotal').value = price * qty;
+            calcGrandTotal();
+        }
+
+        function calcGrandTotal() {
+            let total = 0;
+            document.querySelectorAll('.item-subtotal').forEach(sub => {
+                total += parseFloat(sub.value) || 0;
+            });
+            document.getElementById("grandTotal").value = total.toLocaleString('id-ID');
+            document.getElementById("grandTotal").setAttribute('data-value', total);
+        }
+
+        // Submit Form (Simpan Baru atau Update Edit)
+        document.getElementById("orderForm").addEventListener("submit", function(e) {
+            e.preventDefault(); 
+            
+            const custName = document.getElementById("custName").value;
+            const orderDate = document.getElementById("orderDate").value;
+            const paymentMethod = document.getElementById("paymentMethod").value;
+            const paymentDetail = document.getElementById("paymentDetail").value || "-";
+            const payStatus = document.getElementById("payStatus").value;
+            const grandTotal = document.getElementById("grandTotal").getAttribute('data-value') || 0;
+            
+            let items = [];
+            document.querySelectorAll('.item-row').forEach(row => {
+                let selectVal = row.querySelector('.product-select').value;
+                let productName = selectVal === 'manual' ? row.querySelector('.product-manual').value : selectVal;
+                let price = row.querySelector('.item-price').value;
+                let qty = row.querySelector('.item-qty').value;
+                let subtotal = row.querySelector('.item-subtotal').value;
+
+                if(productName && qty > 0) items.push({ productName, price, qty, subtotal });
+            });
+
+            if(items.length === 0) return alert("Pastikan produk sudah diisi!");
+
+            if (editingId !== null) {
+                // Mode Update
+                const order = orders.find(o => o.id === editingId);
+                if (order) {
+                    order.custName = custName;
+                    order.orderDate = orderDate;
+                    order.paymentMethod = paymentMethod;
+                    order.paymentDetail = paymentDetail;
+                    order.payStatus = payStatus;
+                    order.grandTotal = grandTotal;
+                    order.items = items;
+                    if (currentPhotoBase64) order.photo = currentPhotoBase64;
+                }
+                alert("Pesanan berhasil diperbarui!");
+                resetFormState();
+            } else {
+                // Mode Simpan Baru
+                const newOrder = {
+                    id: currentId++,
+                    orderDate,
+                    custName,
+                    items,
+                    grandTotal,
+                    paymentMethod,
+                    paymentDetail,
+                    payStatus,
+                    statusPembuatan: "Masih Proses",
+                    photo: currentPhotoBase64 
+                };
+                orders.push(newOrder);
+                this.reset();
+                document.getElementById('orderDate').valueAsDate = new Date();
+                document.getElementById("grandTotal").value = "0";
+                
+                const container = document.getElementById("itemsContainer");
+                while (container.children.length > 1) container.removeChild(container.lastChild);
+                container.querySelector('.product-manual').classList.add('d-none');
+            }
+
+            currentPhotoBase64 = "";
+            document.getElementById("imagePreview").src = "";
+            document.getElementById("imagePreview").classList.add("d-none");
+            
+            const pd = document.getElementById("paymentDetail");
+            pd.disabled = true; pd.classList.add("bg-light"); pd.value = ""; pd.placeholder = "Pilih transfer/qris";
+
+            saveData(); // Simpan perubahan ke memori browser
+            renderTable(); 
+        });
+
+        function editOrder(id) {
+            const order = orders.find(o => o.id === id);
+            if (!order) return;
+
+            editingId = id;
+            document.getElementById("formHeaderTitle").innerText = "Edit Pesanan (ID: #" + id + ")";
+            document.getElementById("submitBtn").innerText = "Update Pesanan";
+            document.getElementById("submitBtn").classList.remove("btn-success");
+            document.getElementById("submitBtn").classList.add("btn-warning");
+            document.getElementById("cancelEditBtn").classList.remove("d-none");
+
+            document.getElementById("custName").value = order.custName;
+            document.getElementById("orderDate").value = order.orderDate;
+            document.getElementById("paymentMethod").value = order.paymentMethod;
+            
+            const pd = document.getElementById("paymentDetail");
+            if (order.paymentMethod === "Transfer Bank" || order.paymentMethod === "QRIS") {
+                pd.disabled = false;
+                pd.classList.remove("bg-light");
+                pd.value = order.paymentDetail;
+            } else {
+                pd.disabled = true;
+                pd.classList.add("bg-light");
+                pd.value = "";
+            }
+
+            document.getElementById("payStatus").value = order.payStatus;
+
+            if (order.photo) {
+                currentPhotoBase64 = order.photo;
+                const preview = document.getElementById("imagePreview");
+                preview.src = order.photo;
+                preview.classList.remove("d-none");
+            }
+
+            const container = document.getElementById("itemsContainer");
+            container.innerHTML = "";
+            order.items.forEach(item => {
+                addRow(item);
+            });
+
+            calcGrandTotal();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetFormState() {
+            editingId = null;
+            document.getElementById("formHeaderTitle").innerText = "Input Pesanan Baru";
+            document.getElementById("submitBtn").innerText = "Simpan Pesanan";
+            document.getElementById("submitBtn").classList.remove("btn-warning");
+            document.getElementById("submitBtn").classList.add("btn-success");
+            document.getElementById("cancelEditBtn").classList.add("d-none");
+            
+            document.getElementById("orderForm").reset();
+            document.getElementById('orderDate').valueAsDate = new Date();
+            document.getElementById("grandTotal").value = "0";
+            currentPhotoBase64 = "";
+            document.getElementById("imagePreview").src = "";
+            document.getElementById("imagePreview").classList.add("d-none");
+            
+            const pd = document.getElementById("paymentDetail");
+            pd.disabled = true; pd.classList.add("bg-light"); pd.value = "";
+
+            const container = document.getElementById("itemsContainer");
+            container.innerHTML = "";
+            addRow(); 
+        }
+
+        function updateStatus(id, newStatus) {
+            const order = orders.find(o => o.id === id);
+            if(order) {
+                order.statusPembuatan = newStatus;
+                saveData(); // Simpan status terbaru
+            }
+        }
+
+        function updatePayStatus(id, newPayStatus) {
+            const order = orders.find(o => o.id === id);
+            if(order) {
+                order.payStatus = newPayStatus;
+                saveData(); // Simpan status terbaru
+            }
+        }
+
+        // Tombol untuk menghapus seluruh data jika diperlukan
+        function clearAllData() {
+            if(confirm("Apakah Anda yakin ingin menghapus seluruh riwayat pesanan?")) {
+                localStorage.clear();
+                orders = [];
+                currentId = 1;
+                renderTable();
+            }
+        }
+
+        // Tampilkan data di tabel
+        function renderTable() {
+            const tbody = document.querySelector("#orderTable tbody");
+            tbody.innerHTML = "";
+
+            if (orders.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">Belum ada data pesanan tersimpan.</td></tr>`;
+                return;
+            }
+
+            orders.forEach((order, index) => {
+                const formattedTotal = parseInt(order.grandTotal).toLocaleString('id-ID');
+                
+                let productListHTML = '<ul class="mb-0 ps-3 small">';
+                order.items.forEach(item => {
+                    productListHTML += `<li>${item.qty}x ${item.productName}</li>`;
+                });
+                productListHTML += '</ul>';
+
+                const imgHTML = order.photo ? `<img src="${order.photo}" class="table-thumbnail" onclick="window.open('${order.photo}', '_blank')">` : '<span class="text-muted small">No Foto</span>';
+                let formattedDate = order.orderDate ? order.orderDate.split('-').reverse().join('/') : '-';
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td class="text-center">${imgHTML}</td>
+                        <td>
+                            <strong>${order.custName}</strong><br>
+                            <small class="text-muted">📅 ${formattedDate}</small>
+                        </td>
+                        <td>${productListHTML}</td>
+                        <td class="text-danger fw-bold">Rp ${formattedTotal}</td>
+                        <td>
+                            <select class="form-select form-select-sm" onchange="updateStatus(${order.id}, this.value)">
+                                <option value="Masih Proses" ${order.statusPembuatan === 'Masih Proses' ? 'selected' : ''}>⏳ Masih Proses</option>
+                                <option value="Sudah Jadi" ${order.statusPembuatan === 'Sudah Jadi' ? 'selected' : ''}>✅ Sudah Jadi</option>
+                            </select>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm mb-1" onchange="updatePayStatus(${order.id}, this.value)">
+                                <option value="Belum Bayar" ${order.payStatus === 'Belum Bayar' ? 'selected' : ''}>⏳ Belum Bayar</option>
+                                <option value="Sudah Bayar" ${order.payStatus === 'Sudah Bayar' ? 'selected' : ''}>✅ Sudah Bayar</option>
+                            </select>
+                            <small class="text-muted">${order.paymentMethod} (${order.paymentDetail})</small>
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-warning mb-1 w-100" onclick="editOrder(${order.id})">✏️ Edit</button>
+                            <button class="btn btn-sm btn-danger w-100" onclick="printInvoice(${order.id})">🖨️ Invoice</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // Print Daftar Pesanan
+        function printOrderTable() {
+            if(orders.length === 0) return alert("Belum ada data pesanan untuk dicetak!");
+
+            const printWindow = window.open('', '_blank');
+            const dateStr = new Date().toLocaleString('id-ID');
+
+            let tableRows = '';
+            orders.forEach((order, index) => {
+                let itemsList = order.items.map(i => `${i.qty}x ${i.productName}`).join(', ');
+                tableRows += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${order.custName} (${order.orderDate})</td>
+                        <td>${itemsList}</td>
+                        <td>Rp ${parseInt(order.grandTotal).toLocaleString('id-ID')}</td>
+                        <td>${order.payStatus} - ${order.paymentMethod}</td>
+                        <td><strong>${order.statusPembuatan}</strong></td>
+                    </tr>
+                `;
+            });
+
+            const htmlDocument = `
+                <html>
+                <head>
+                    <title>Daftar Pesanan - ${dateStr}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        h2 { text-align: center; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+                        th { background-color: #f2f2f2; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Laporan Daftar Status Pembuatan & Pembayaran Toko Roti</h2>
+                    <p>Dicetak pada: ${dateStr}</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Customer & Tanggal</th>
+                                <th>Pesanan</th>
+                                <th>Total Bayar</th>
+                                <th>Pembayaran</th>
+                                <th>Status Produksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                    <script>window.onload = function() { window.print(); }<\/script>
+                </body>
+                </html>
+            `;
+            printWindow.document.write(htmlDocument);
+            printWindow.document.close();
+        }
+
+        // Print Invoice Per Pelanggan
+        function printInvoice(id) {
+            const order = orders.find(o => o.id === id);
+            if(!order) return;
+
+            const formattedTotal = parseInt(order.grandTotal).toLocaleString('id-ID');
+
+            let itemsTableHTML = '';
+            order.items.forEach(item => {
+                let priceFmt = parseInt(item.price).toLocaleString('id-ID');
+                let subFmt = parseInt(item.subtotal).toLocaleString('id-ID');
+                itemsTableHTML += `
+                    <tr>
+                        <td>${item.productName}</td>
+                        <td>Rp ${priceFmt}</td>
+                        <td>${item.qty}</td>
+                        <td>Rp ${subFmt}</td>
+                    </tr>
+                `;
+            });
+
+            let photoHTML = order.photo ? `<div style="text-align:center; margin-bottom:20px;"><img src="${order.photo}" style="max-width:200px; border:1px solid #ccc; padding:5px;"></div>` : '';
+
+            const printWindow = window.open('', '_blank');
+            const invoiceHTML = `
+                <html>
+                <head>
+                    <title>Invoice - ${order.custName}</title>
+                    <style>
+                        body { font-family: 'Helvetica', Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
+                        .header { text-align: center; border-bottom: 2px solid #2c3e50; padding-bottom: 20px; margin-bottom: 30px; }
+                        .info-table { width: 100%; margin-bottom: 30px; }
+                        .info-table td { padding: 5px; }
+                        .item-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                        .item-table th, .item-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+                        .item-table th { background-color: #f8f9fa; }
+                        .total-row { text-align: right; font-size: 1.2em; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>INVOICE TOKO ROTI & KUE</h2>
+                        <p>Tanggal Order: ${order.orderDate}</p>
+                    </div>
+                    ${photoHTML}
+                    <table class="info-table">
+                        <tr><td><strong>Nama Customer</strong></td><td>: ${order.custName}</td></tr>
+                        <tr><td><strong>Status Pembayaran</strong></td><td>: ${order.payStatus} (${order.paymentMethod} - ${order.paymentDetail})</td></tr>
+                        <tr><td><strong>Status Produksi</strong></td><td>: ${order.statusPembuatan}</td></tr>
+                    </table>
+                    <table class="item-table">
+                        <thead>
+                            <tr><th>Produk</th><th>Harga Satuan</th><th>Qty</th><th>Subtotal</th></tr>
+                        </thead>
+                        <tbody>${itemsTableHTML}</tbody>
+                    </table>
+                    <div class="total-row">TOTAL BAYAR: Rp ${formattedTotal}</div>
+                    <script>window.onload = function() { window.print(); }<\/script>
+                </body>
+                </html>
+            `;
+            printWindow.document.write(invoiceHTML);
+            printWindow.document.close();
+        }
+    </script>
+</body>
+</html>
